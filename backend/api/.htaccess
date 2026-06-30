@@ -1,0 +1,33 @@
+# WABEES Backend — Security & URL Rules
+# Place in: public_html/api/.htaccess
+
+# Deny directory listing
+Options -Indexes
+
+# Deny access to log files
+<FilesMatch "\.(log|txt)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# Deny access to hidden files
+<FilesMatch "^\.">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# CORS Headers (for Flutter app)
+<IfModule mod_headers.c>
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+    Header set Access-Control-Allow-Headers "Content-Type, Authorization"
+</IfModule>
+
+# PHP Settings
+<IfModule mod_php.c>
+    php_flag display_errors Off
+    php_value error_reporting 0
+    php_value max_execution_time 60
+    php_value upload_max_filesize 10M
+    php_value post_max_size 10M
+</IfModule>
