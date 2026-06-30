@@ -1,12 +1,8 @@
 <?php
 /**
  * WABEES — WhatsApp API Proxy: Send Message
- * 
- * Proxies message sending to WhatsApp Cloud API
  * POST /api/send-message.php
- * 
- * Body: { phone_number_id, access_token, to, type, message?, template_name?, ... }
- * Types: text, template, image, video, document, audio
+ * Types: text, template, image, video, document, audio, sticker, reaction
  */
 
 header('Content-Type: application/json');
@@ -14,24 +10,15 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type');
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
-
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['error' => ['message' => 'Method not allowed']]);
     exit;
 }
 
-if (!empty($input['context_message_id'])) {
-    $waPayload['context'] = ['message_id' => $input['context_message_id']];
-}
+$input = json_decode(file_get_contents('php://input'), true) ?: [];
 
-$input = json_decode(file_get_contents('php://input'), true);
-
-// Validate required fields
 $required = ['phone_number_id', 'access_token', 'to', 'type'];
 foreach ($required as $field) {
     if (empty($input[$field])) {
@@ -42,16 +29,16 @@ foreach ($required as $field) {
 }
 
 $phoneNumberId = $input['phone_number_id'];
-$accessToken = $input['access_token'];
-$to = $input['to'];
-$type = $input['type'];
+$accessToken   = $input['access_token'];
+$to            = $input['to'];
+$type          = $input['type'];
 
-// Build WhatsApp API payload
 $url = "https://graph.facebook.com/v21.0/{$phoneNumberId}/messages";
 
 $payload = [
     'messaging_product' => 'whatsapp',
-    'to' => $to,
+    'recipient_type'    => 'individual',
+    'to'                => $to,
 ];
 
 switch ($type) {
@@ -62,7 +49,7 @@ switch ($type) {
             exit;
         }
         $payload['type'] = 'text';
-        $payload['text'] = ['body' => $input['message']];
+        $payload['text'] = ['preview_url' => true, 'body' => $input['message']];
         break;
 
     case 'template':
@@ -73,7 +60,7 @@ switch ($type) {
         }
         $payload['type'] = 'template';
         $payload['template'] = [
-            'name' => $input['template_name'],
+            'name'     => $input['template_name'],
             'language' => ['code' => $input['language_code']],
         ];
         if (!empty($input['components'])) {
@@ -85,6 +72,7 @@ switch ($type) {
     case 'video':
     case 'document':
     case 'audio':
+    case 'sticker':
         $mediaId  = $input['media_id']  ?? '';
         $mediaUrl = $input['media_url'] ?? '';
         if (empty($mediaId) && empty($mediaUrl)) {
@@ -94,22 +82,31 @@ switch ($type) {
         }
         $payload['type'] = $type;
         $mediaPayload = [];
-        // WhatsApp API accepts ONLY 'id' OR 'link', NOT both!
-        // Prefer 'id' (from WhatsApp Cloud upload) over 'link' (public URL)
-        if (!empty($mediaId)) {
-            $mediaPayload['id'] = $mediaId;
-        } elseif (!empty($mediaUrl)) {
-            $mediaPayload['link'] = $mediaUrl;
-        }
-        if (!empty($input['caption']) && in_array($type, ['image', 'video', 'document'])) {
+        if (!empty($mediaId))      $mediaPayload['id']   = $mediaId;
+        else                       $mediaPayload['link'] = $mediaUrl;
+        if (!empty($input['caption']) && in_array($type, ['image','video','document'], true)) {
             $mediaPayload['caption'] = $input['caption'];
         }
-        // CRITICAL: audio with voice=true sends as WhatsApp voice note (waveform UI)
-        // Without this flag it sends as a regular audio file attachment
-        if ($type === 'audio' && ($input['is_voice'] ?? false)) {
+        if ($type === 'document' && !empty($input['filename'])) {
+            $mediaPayload['filename'] = $input['filename'];
+        }
+        if ($type === 'audio' && !empty($input['is_voice'])) {
             $mediaPayload['voice'] = true;
         }
         $payload[$type] = $mediaPayload;
+        break;
+
+    case 'reaction':
+        if (empty($input['message_id'])) {
+            http_response_code(400);
+            echo json_encode(['error' => ['message' => 'message_id is required for reaction']]);
+            exit;
+        }
+        $payload['type'] = 'reaction';
+        $payload['reaction'] = [
+            'message_id' => $input['message_id'],
+            'emoji'      => $input['emoji'] ?? '',
+        ];
         break;
 
     default:
@@ -118,7 +115,11 @@ switch ($type) {
         exit;
 }
 
-// Send to Meta API
+// Reply context — only valid for non-reaction sends.
+if ($type !== 'reaction' && !empty($input['context_message_id'])) {
+    $payload['context'] = ['message_id' => $input['context_message_id']];
+}
+
 $ch = curl_init();
 curl_setopt($ch, CURLOPT_URL, $url);
 curl_setopt($ch, CURLOPT_POST, true);
@@ -131,17 +132,15 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, [
     "Authorization: Bearer {$accessToken}",
 ]);
 
-$response = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$response  = curl_exec($ch);
+$httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 $curlError = curl_error($ch);
 curl_close($ch);
 
-// Log errors for debugging
 if ($httpCode !== 200) {
     $logFile = __DIR__ . '/../logs/send_errors_' . date('Y-m-d') . '.log';
-    $logDir = dirname($logFile);
-    if (!is_dir($logDir))
-        mkdir($logDir, 0755, true);
+    $logDir  = dirname($logFile);
+    if (!is_dir($logDir)) mkdir($logDir, 0755, true);
     file_put_contents(
         $logFile,
         date('H:i:s') . " TO=$to TYPE=$type HTTP=$httpCode CURL_ERR=$curlError RESPONSE=$response\n",
@@ -159,7 +158,5 @@ if ($curlError) {
 }
 
 $data = json_decode($response, true);
-
 http_response_code($httpCode);
 echo json_encode($data ?: ['error' => ['message' => 'No response from WhatsApp API']]);
-?>
