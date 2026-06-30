@@ -1,11 +1,14 @@
 <?php
 /**
- * WABEES — Mark Message as Read
- * 
+ * WABEES — Mark Message as Read (+ optional typing indicator)
+ *
  * POST /api/mark-read.php
- * Body: { phone_number_id, access_token, message_id }
- * 
- * Sends a read receipt to WhatsApp Cloud API
+ * Body: { phone_number_id, access_token, message_id, typing_indicator? }
+ *
+ * Sends a read receipt to WhatsApp Cloud API. When `typing_indicator` is
+ * present (string "text" or object), Meta also shows a typing indicator to
+ * the customer for ~25 seconds, dismissing automatically when the next
+ * outbound message is sent.
  */
 
 header('Content-Type: application/json');
@@ -28,6 +31,7 @@ $input = json_decode(file_get_contents('php://input'), true);
 $phoneNumberId = $input['phone_number_id'] ?? '';
 $accessToken = $input['access_token'] ?? '';
 $messageId = $input['message_id'] ?? '';
+$typingIndicator = $input['typing_indicator'] ?? null;
 
 if (empty($phoneNumberId) || empty($accessToken) || empty($messageId)) {
     http_response_code(400);
@@ -42,6 +46,16 @@ $payload = [
     'status' => 'read',
     'message_id' => $messageId,
 ];
+
+// Typing indicator: per Meta docs the field is an object { type: "text" }.
+// Accept either a bare string ("text") or a pre-shaped object.
+if (!empty($typingIndicator)) {
+    if (is_string($typingIndicator)) {
+        $payload['typing_indicator'] = ['type' => $typingIndicator];
+    } elseif (is_array($typingIndicator)) {
+        $payload['typing_indicator'] = $typingIndicator;
+    }
+}
 
 $ch = curl_init();
 curl_setopt($ch, CURLOPT_URL, $url);
@@ -63,4 +77,3 @@ $data = json_decode($response, true);
 
 http_response_code($httpCode);
 echo json_encode($data ?: ['success' => true]);
-?>
