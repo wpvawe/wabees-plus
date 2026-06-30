@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "221545100008",
+    "project_id": "wabees-app",
+    "storage_bucket": "wabees-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:221545100008:android:cc9aa56145e1c948a14f5d",
+        "android_client_info": {
+          "package_name": "com.wabees.wabees_android"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "221545100008-nqj2rls48iup6m8b1heg7569tsq5ubqd.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.wabees.wabees_android",
+            "certificate_hash": "f21a3cf1733273ad735423ab54157d3b6ddd83c8"
+          }
+        },
+        {
+          "client_id": "221545100008-54ei7sl8r2ejbv5fgdiqlv09a255hrsr.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDvoxsc0sHMkNliwG3rOB5FhhDQA48bc9E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "221545100008-54ei7sl8r2ejbv5fgdiqlv09a255hrsr.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="0dp"
+    android:background="@drawable/widget_background">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <!-- Header -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingBottom="10dp">
+            <ImageView
+                android:id="@+id/hdr_icon"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_centerVertical="true"
+                android:scaleType="fitCenter"
+                android:adjustViewBounds="true"
+                android:padding="1dp"
+                android:src="@mipmap/launcher_icon" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_toEndOf="@id/hdr_icon"
+                android:layout_centerVertical="true"
+                android:text="WABEES"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:paddingStart="8dp" />
+            <TextView
+                android:id="@+id/widget_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:textColor="#88FFFFFF"
+                android:textSize="10sp" />
+        </RelativeLayout>
+
+        <!-- ROW 0 -->
+        <RelativeLayout android:id="@+id/r0"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:paddingTop="7dp" android:paddingBottom="7dp" android:visibility="gone">
+            <FrameLayout android:id="@+id/af0"
+                android:layout_width="34dp" android:layout_height="34dp"
+                android:layout_centerVertical="true"
+                android:background="@drawable/avatar_circle">
+                <TextView android:id="@+id/a0"
+                    android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:gravity="center" android:textColor="#FFFFFF"
+                    android:textSize="14sp" android:textStyle="bold" />
+            </FrameLayout>
+            <TextView android:id="@+id/t0"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true" android:layout_alignTop="@id/af0"
+                android:textColor="#77FFFFFF" android:textSize="9sp" />
+            <TextView android:id="@+id/n0"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_toEndOf="@id/af0" android:layout_toStartOf="@id/t0"
+                android:layout_alignTop="@id/af0"
+                android:paddingStart="10dp" android:paddingEnd="8dp"
+                android:textColor="#FFFFFF" android:textSize="12sp"
+                android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/m0"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_toEndOf="@id/af0" android:layout_below="@id/n0"
+                android:paddingStart="10dp" android:paddingEnd="8dp" android:paddingTop="2dp"
+                android:textColor="#AAFFFFFF" android:textSize="10sp" android:maxLines="1" />
+            <TextView android:id="@+id/u0"
+                android:layout_width="18dp" android:layout_height="18dp"
+                android:layout_alignParentEnd="true" android:layout_below="@id/t0"
+                android:layout_marginTop="3dp"
+                android:gravity="center" android:textColor="#FFFFFF"
+                android:textSize="8sp" android:textStyle="bold"
+                android:background="@drawable/unread_badge" android:visibility="gone" />
+        </RelativeLayout>
+
+        <!-- ROW 1 -->
+        <RelativeLayout android:id="@+id/r1"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:paddingTop="7dp" android:paddingBottom="7dp" android:visibility="gone">
+            <FrameLayout android:id="@+id/af1"
+                android:layout_width="34dp" android:layout_height="34dp"
+                android:layout_centerVertical="true"
+                android:background="@drawable/avatar_circle">
+                <TextView android:id="@+id/a1"
+                    android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:gravity="center" android:textColor="#FFFFFF"
+                    android:textSize="14sp" android:textStyle="bold" />
+            </FrameLayout>
+            <TextView android:id="@+id/t1"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true" android:layout_alignTop="@id/af1"
+                android:textColor="#77FFFFFF" android:textSize="9sp" />
+            <TextView android:id="@+id/n1"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_toEndOf="@id/af1" android:layout_toStartOf="@id/t1"
+                android:layout_alignTop="@id/af1"
+                android:paddingStart="10dp" android:paddingEnd="8dp"
+                android:textColor="#FFFFFF" android:textSize="12sp"
+                android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/m1"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_toEndOf="@id/af1" android:layout_below="@id/n1"
+                android:paddingStart="10dp" android:paddingEnd="8dp" android:paddingTop="2dp"
+                android:textColor="#AAFFFFFF" android:textSize="10sp" android:maxLines="1" />
+            <TextView android:id="@+id/u1"
+                android:layout_width="18dp" android:layout_height="18dp"
+                android:layout_alignParentEnd="true" android:layout_below="@id/t1"
+                android:layout_marginTop="3dp"
+                android:gravity="center" android:textColor="#FFFFFF"
+                android:textSize="8sp" android:textStyle="bold"
+                android:background="@drawable/unread_badge" android:visibility="gone" />
+        </RelativeLayout>
+
+        <!-- ROW 2 -->
+        <RelativeLayout android:id="@+id/r2"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:paddingTop="7dp" android:paddingBottom="7dp" android:visibility="gone">
+            <FrameLayout android:id="@+id/af2"
+                android:layout_width="34dp" android:layout_height="34dp"
+                android:layout_centerVertical="true"
+                android:background="@drawable/avatar_circle">
+                <TextView android:id="@+id/a2"
+                    android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:gravity="center" android:textColor="#FFFFFF"
+                    android:textSize="14sp" android:textStyle="bold" />
+            </FrameLayout>
+            <TextView android:id="@+id/t2"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true" android:layout_alignTop="@id/af2"
+                android:textColor="#77FFFFFF" android:textSize="9sp" />
+            <TextView android:id="@+id/n2"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_toEndOf="@id/af2" android:layout_toStartOf="@id/t2"
+                android:layout_alignTop="@id/af2"
+                android:paddingStart="10dp" android:paddingEnd="8dp"
+                android:textColor="#FFFFFF" android:textSize="12sp"
+                android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/m2"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_toEndOf="@id/af2" android:layout_below="@id/n2"
+                android:paddingStart="10dp" android:paddingEnd="8dp" android:paddingTop="2dp"
+                android:textColor="#AAFFFFFF" android:textSize="10sp" android:maxLines="1" />
+            <TextView android:id="@+id/u2"
+                android:layout_width="18dp" android:layout_height="18dp"
+                android:layout_alignParentEnd="true" android:layout_below="@id/t2"
+                android:layout_marginTop="3dp"
+                android:gravity="center" android:textColor="#FFFFFF"
+                android:textSize="8sp" android:textStyle="bold"
+                android:background="@drawable/unread_badge" android:visibility="gone" />
+        </RelativeLayout>
+
+        <!-- ROW 3 -->
+        <RelativeLayout android:id="@+id/r3"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:paddingTop="7dp" android:paddingBottom="7dp" android:visibility="gone">
+            <FrameLayout android:id="@+id/af3"
+                android:layout_width="34dp" android:layout_height="34dp"
+                android:layout_centerVertical="true"
+                android:background="@drawable/avatar_circle">
+                <TextView android:id="@+id/a3"
+                    android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:gravity="center" android:textColor="#FFFFFF"
+                    android:textSize="14sp" android:textStyle="bold" />
+            </FrameLayout>
+            <TextView android:id="@+id/t3"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true" android:layout_alignTop="@id/af3"
+                android:textColor="#77FFFFFF" android:textSize="9sp" />
+            <TextView android:id="@+id/n3"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_toEndOf="@id/af3" android:layout_toStartOf="@id/t3"
+                android:layout_alignTop="@id/af3"
+                android:paddingStart="10dp" android:paddingEnd="8dp"
+                android:textColor="#FFFFFF" android:textSize="12sp"
+                android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/m3"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_toEndOf="@id/af3" android:layout_below="@id/n3"
+                android:paddingStart="10dp" android:paddingEnd="8dp" android:paddingTop="2dp"
+                android:textColor="#AAFFFFFF" android:textSize="10sp" android:maxLines="1" />
+            <TextView android:id="@+id/u3"
+                android:layout_width="18dp" android:layout_height="18dp"
+                android:layout_alignParentEnd="true" android:layout_below="@id/t3"
+                android:layout_marginTop="3dp"
+                android:gravity="center" android:textColor="#FFFFFF"
+                android:textSize="8sp" android:textStyle="bold"
+                android:background="@drawable/unread_badge" android:visibility="gone" />
+        </RelativeLayout>
+
+        <!-- ROW 4 -->
+        <RelativeLayout android:id="@+id/r4"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:paddingTop="7dp" android:paddingBottom="7dp" android:visibility="gone">
+            <FrameLayout android:id="@+id/af4"
+                android:layout_width="34dp" android:layout_height="34dp"
+                android:layout_centerVertical="true"
+                android:background="@drawable/avatar_circle">
+                <TextView android:id="@+id/a4"
+                    android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:gravity="center" android:textColor="#FFFFFF"
+                    android:textSize="14sp" android:textStyle="bold" />
+            </FrameLayout>
+            <TextView android:id="@+id/t4"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true" android:layout_alignTop="@id/af4"
+                android:textColor="#77FFFFFF" android:textSize="9sp" />
+            <TextView android:id="@+id/n4"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_toEndOf="@id/af4" android:layout_toStartOf="@id/t4"
+                android:layout_alignTop="@id/af4"
+                android:paddingStart="10dp" android:paddingEnd="8dp"
+                android:textColor="#FFFFFF" android:textSize="12sp"
+                android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/m4"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_toEndOf="@id/af4" android:layout_below="@id/n4"
+                android:paddingStart="10dp" android:paddingEnd="8dp" android:paddingTop="2dp"
+                android:textColor="#AAFFFFFF" android:textSize="10sp" android:maxLines="1" />
+            <TextView android:id="@+id/u4"
+                android:layout_width="18dp" android:layout_height="18dp"
+                android:layout_alignParentEnd="true" android:layout_below="@id/t4"
+                android:layout_marginTop="3dp"
+                android:gravity="center" android:textColor="#FFFFFF"
+                android:textSize="8sp" android:textStyle="bold"
+                android:background="@drawable/unread_badge" android:visibility="gone" />
+        </RelativeLayout>
+
+        <!-- Empty -->
+        <TextView android:id="@+id/widget_empty"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:gravity="center" android:text="Open app to load messages"
+            android:textColor="#55FFFFFF" android:textSize="11sp"
+            android:paddingTop="20dp" />
+    </LinearLayout>
+</RelativeLayout>
