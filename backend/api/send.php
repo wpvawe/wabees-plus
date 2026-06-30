@@ -34,6 +34,24 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 require_once __DIR__ . '/../config/firebase-config.php';
 
+// Canonical phone normalizer — mirrors webhook.php normalize_phone() and the
+// Flutter/website +E.164 form. Prevents conversation docs forking between
+// "+92xxx" (webhook) and "+92xxx" (this endpoint) for local-format inputs.
+if (!function_exists('send_normalize_phone')) {
+    function send_normalize_phone($phone) {
+        $cleaned = preg_replace('/[\s\-\(\)]/', '', (string)$phone);
+        if (str_starts_with($cleaned, '+')) $cleaned = substr($cleaned, 1);
+        $cleaned = preg_replace('/[^0-9]/', '', $cleaned);
+        if ($cleaned === '') return '';
+        if (str_starts_with($cleaned, '0') && strlen($cleaned) === 11) {
+            $cleaned = '92' . substr($cleaned, 1);
+        } elseif (str_starts_with($cleaned, '3') && strlen($cleaned) === 10) {
+            $cleaned = '92' . $cleaned;
+        }
+        return '+' . $cleaned;
+    }
+}
+
 // ============ 1. AUTHENTICATE — JWT (Authorization: Bearer …) OR X-Api-Key ============
 // JWT path is used by the WABEES web dashboard (signed with PHP_BACKEND_JWT_SECRET).
 // X-Api-Key path remains for the Flutter app and external integrations.
@@ -112,7 +130,8 @@ if (!$body || empty($body['phone']) || empty($body['message'])) {
     exit;
 }
 
-$phone = preg_replace('/[^0-9]/', '', $body['phone']);
+$rawPhone = $body['phone'];
+$phone = preg_replace('/[^0-9]/', '', (string)$rawPhone);
 $message = trim($body['message']);
 
 if (strlen($phone) < 10) {
@@ -126,8 +145,14 @@ if (strlen($message) < 1 || strlen($message) > 4096) {
     exit;
 }
 
-// Normalize: ensure + prefix
-$phone = '+' . $phone;
+// H-5 fix: use the canonical normalizer so local-format inputs (03001234567)
+// produce the same +E.164 doc id as the webhook & the website client.
+$phone = send_normalize_phone($rawPhone);
+if ($phone === '' || $phone === '+') {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'Invalid phone number']);
+    exit;
+}
 
 // ============ 3. FIND USER BY API KEY (if JWT path didn't already set userId) ============
 if (!$userId) {
@@ -221,10 +246,20 @@ $data = json_decode($response, true);
 if ($httpCode >= 200 && $httpCode < 300) {
     $messageId = $data['messages'][0]['id'] ?? null;
 
-    // Save outgoing message to Firestore
-    $docId = 'msg_api_' . time() . '_' . rand(1000, 9999);
-    $nowIso = gmdate('Y-m-d\TH:i:s\Z');
+    // M-5 fix: uniqid() with more_entropy is collision-safe under concurrent
+    // load; time()+rand(1000,9999) has only 8999 buckets per second.
+    $docId = 'msg_api_' . uniqid('', true);
+    // L-5 fix: prefer Meta's accepted-at timestamp when available so the
+    // conversation ordering matches the source of truth instead of the
+    // Hostinger wall clock (which can drift vs. front-end serverTimestamp).
+    $metaTs = $data['messages'][0]['timestamp'] ?? null;
+    $nowIso = $metaTs && is_numeric($metaTs)
+        ? gmdate('Y-m-d\TH:i:s\Z', (int)$metaTs)
+        : gmdate('Y-m-d\TH:i:s\Z');
 
+    // C-2 fix: persist whatsappMessageId so status webhooks (delivered/read)
+    // and inbound reactions/replies can match this doc. Without it, ticks
+    // never advance past "sent" for messages sent through this endpoint.
     firestore_set("users/$userId/messages/$docId", [
         'contactPhone' => $phone,
         'contactName' => $phone,
@@ -232,6 +267,7 @@ if ($httpCode >= 200 && $httpCode < 300) {
         'direction' => 'outgoing',
         'status' => 'sent',
         'body' => $message,
+        'whatsappMessageId' => $messageId,
         'createdAt' => $nowIso,
         'sentVia' => 'api',
     ]);

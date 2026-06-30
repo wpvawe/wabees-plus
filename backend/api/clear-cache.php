@@ -15,14 +15,22 @@
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit;
 }
 
-define('CACHE_CLEAR_SECRET', 'wabees_cache_clear_2024');
+// C-3 fix: stop shipping a static secret to browsers. We accept either a
+// verified Firebase ID token (web dashboard path) OR the legacy static
+// secret loaded from env / config file (Flutter app path). The literal
+// string is no longer hardcoded so the JS bundle no longer leaks it.
+$CACHE_CLEAR_SECRET = getenv('CACHE_CLEAR_SECRET');
+if (!$CACHE_CLEAR_SECRET && is_file(__DIR__ . '/../config/cache-clear-secret.php')) {
+    $CACHE_CLEAR_SECRET = require __DIR__ . '/../config/cache-clear-secret.php';
+}
+require_once __DIR__ . '/../config/firebase-auth.php';
 
 // Get params from POST body or GET
 $input = [];
@@ -33,12 +41,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $phoneNumberId = $input['phone_number_id'] ?? ($_GET['phone_number_id'] ?? '');
 $secret = $input['secret'] ?? ($_GET['secret'] ?? '');
+$idToken = $input['id_token'] ?? '';
+if (!$idToken) {
+    $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? ($_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
+    if (preg_match('/Bearer\s+(.+)/i', $authHeader, $m)) $idToken = trim($m[1]);
+}
 $clearAll = isset($input['clear_all']) || isset($_GET['clear_all']);
 
-// Auth check
-if ($secret !== CACHE_CLEAR_SECRET) {
+// Auth check: prefer Firebase ID token (verified upstream), fall back to
+// legacy static secret. Reject if neither is valid.
+$authedUid = null;
+if ($idToken) {
+    $err = null;
+    $authedUid = verify_firebase_id_token($idToken, $err);
+}
+$secretOk = ($CACHE_CLEAR_SECRET && $secret === $CACHE_CLEAR_SECRET);
+if (!$authedUid && !$secretOk) {
     http_response_code(403);
-    echo json_encode(['success' => false, 'error' => 'Invalid secret']);
+    echo json_encode(['success' => false, 'error' => 'Unauthorized']);
     exit;
 }
 
