@@ -260,9 +260,14 @@ if ($httpCode >= 200 && $httpCode < 300) {
     // C-2 fix: persist whatsappMessageId so status webhooks (delivered/read)
     // and inbound reactions/replies can match this doc. Without it, ticks
     // never advance past "sent" for messages sent through this endpoint.
+    // Resolve existing contactName from contacts doc, fall back to phone
+    $contactDoc = firestore_get("users/$userId/contacts/$phone");
+    $existingName = $contactDoc['data']['fields']['name']['stringValue'] ?? '';
+    $resolvedName = !empty($existingName) ? $existingName : $phone;
+
     firestore_set("users/$userId/messages/$docId", [
         'contactPhone' => $phone,
-        'contactName' => $phone,
+        'contactName' => $resolvedName,
         'type' => 'text',
         'direction' => 'outgoing',
         'status' => 'sent',
@@ -275,7 +280,7 @@ if ($httpCode >= 200 && $httpCode < 300) {
     // Update conversation
     firestore_set("users/$userId/conversations/$phone", [
         'contactPhone' => $phone,
-        'contactName' => $phone,
+        'contactName' => $resolvedName,
         'lastMessage' => mb_substr($message, 0, 100),
         'lastMessageType' => 'text',
         'lastMessageAt' => $nowIso,
