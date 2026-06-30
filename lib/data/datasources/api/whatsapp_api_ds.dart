@@ -58,6 +58,7 @@ class WhatsappApiDs {
     required String accessToken,
     required String to,
     required String message,
+    String? contextMessageId, // wamid to reply to (Meta context.message_id)
   }) async {
     try {
       final response = await _dio.post(
@@ -68,6 +69,8 @@ class WhatsappApiDs {
           'to': to,
           'type': 'text',
           'message': message,
+          if (contextMessageId != null && contextMessageId.isNotEmpty)
+            'context_message_id': contextMessageId,
         },
       );
       return WhatsappApiResponse.fromJson(response.data);
@@ -288,6 +291,8 @@ class WhatsappApiDs {
     String? mediaId,
     String? caption,
     bool? isVoice, // true = send as real WA voice note
+    String? filename, // document filename
+    String? contextMessageId, // wamid to reply to
   }) async {
     try {
       final Map<String, dynamic> data = {
@@ -306,6 +311,12 @@ class WhatsappApiDs {
       // Send voice notes as real WhatsApp voice messages (waveform UI)
       if (mediaType == 'audio' && (isVoice ?? false)) {
         data['is_voice'] = true;
+      }
+      if (mediaType == 'document' && filename != null && filename.isNotEmpty) {
+        data['filename'] = filename;
+      }
+      if (contextMessageId != null && contextMessageId.isNotEmpty) {
+        data['context_message_id'] = contextMessageId;
       }
 
       final response = await _dio.post(
@@ -390,6 +401,62 @@ class WhatsappApiDs {
       return WhatsappApiResponse.fromJson(response.data);
     } on DioException catch (e) {
       return WhatsappApiResponse.error(_friendlyDioError(e, 'Failed to send read receipt'));
+    } catch (e) {
+      return WhatsappApiResponse.error('Something went wrong. Please try again');
+    }
+  }
+
+  // ============ SEND TYPING INDICATOR ============
+  // Meta v21.0 supports a typing_indicator field on the mark-read call.
+  // The website Composer uses the same backend endpoint; debounce + throttle
+  // at the call site so we don't spam Meta.
+  Future<WhatsappApiResponse> sendTypingIndicator({
+    required String phoneNumberId,
+    required String accessToken,
+    required String messageId,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/mark-read.php',
+        data: {
+          'phone_number_id': phoneNumberId,
+          'access_token': accessToken,
+          'message_id': messageId,
+          'typing_indicator': true,
+        },
+      );
+      return WhatsappApiResponse.fromJson(response.data);
+    } on DioException catch (e) {
+      return WhatsappApiResponse.error(_friendlyDioError(e, 'Typing indicator failed'));
+    } catch (e) {
+      return WhatsappApiResponse.error('Something went wrong. Please try again');
+    }
+  }
+
+  // ============ SEND REACTION ============
+  // Mirrors React `sendReactionMessage`. Empty emoji removes the reaction.
+  Future<WhatsappApiResponse> sendReactionMessage({
+    required String phoneNumberId,
+    required String accessToken,
+    required String to,
+    required String messageId,
+    required String emoji,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/send-message.php',
+        data: {
+          'phone_number_id': phoneNumberId,
+          'access_token': accessToken,
+          'to': to,
+          'type': 'reaction',
+          'message_id': messageId,
+          'emoji': emoji,
+        },
+      );
+      return WhatsappApiResponse.fromJson(response.data);
+    } on DioException catch (e) {
+      return WhatsappApiResponse.error(_friendlyDioError(e, 'Failed to send reaction'));
     } catch (e) {
       return WhatsappApiResponse.error('Something went wrong. Please try again');
     }
