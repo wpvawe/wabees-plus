@@ -1,0 +1,65 @@
+name: Flutter Build
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'android/**'
+      - '.github/workflows/flutter-build.yml'
+  workflow_dispatch:
+
+jobs:
+  analyze-and-build:
+    name: Analyze & Build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze (non-blocking)
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
+
+      - name: Build APK (release, split-per-abi)
+        run: flutter build apk --release --split-per-abi
+
+      - name: Build universal APK (release)
+        run: flutter build apk --release
+
+      - name: Upload split APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: wabees-apks-split
+          path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload universal APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: wabees-apk-universal
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
