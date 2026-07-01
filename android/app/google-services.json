@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "221545100008-nqj2rls48iup6m8b1heg7569tsq5ubqd.apps.googleusercontent.com",
+          "client_id": "221545100008-qfpbmkahht5of43iklrl1805hur7boub.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.wabees.wabees_android",
-            "certificate_hash": "f21a3cf1733273ad735423ab54157d3b6ddd83c8"
+            "certificate_hash": "4a296533ea6e03f85cfc9949430be0c036ef5517"
           }
         },
         {
