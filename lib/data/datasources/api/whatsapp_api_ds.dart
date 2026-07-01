@@ -8,7 +8,7 @@ class WhatsappApiDs {
   late final Dio _dio;
 
   // ⚠️ API base domain
-  static const String _baseUrl = 'https://api.wabees.live/api';
+  static const String _baseUrl = 'https://api.wabees.live';
 
   WhatsappApiDs() {
     _dio = Dio(BaseOptions(
