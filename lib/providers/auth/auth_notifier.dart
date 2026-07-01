@@ -271,7 +271,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         // Also notify admins via server-side FCM (secondary channel)
         try {
           final dio = Dio(BaseOptions(
-            baseUrl: 'https://api.wabees.live/api',
+            baseUrl: 'https://api.wabees.live',
             connectTimeout: const Duration(seconds: 10),
             receiveTimeout: const Duration(seconds: 15),
           ));
