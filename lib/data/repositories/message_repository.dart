@@ -516,10 +516,36 @@ class MessageRepository {
         'status': MessageStatus.sent.name,
         'whatsappMessageId': waMessageId,
       });
+      // Count templates in the owner's total sent counter so the dashboard
+      // reflects reality regardless of message type.
+      _firestore.user(userId).update({
+        'totalMessages': FieldValue.increment(1),
+      }).catchError((_) => null);
+      _planRepo.incrementMessages(userId).catchError((_) {});
       return message.copyWith(status: MessageStatus.sent);
     } else {
       await msgRef.update({'status': MessageStatus.failed.name});
       return message.copyWith(status: MessageStatus.failed);
+    }
+  }
+
+  /// One-shot repair: recompute users/{ownerId}.totalMessages from the actual
+  /// count of outgoing messages. Cheap (aggregate .count()), safe to run on
+  /// dashboard load — writes back only if the stored value drifted.
+  Future<int?> repairTotalMessages(String ownerId, int currentValue) async {
+    try {
+      final snap = await _firestore.user(ownerId)
+          .collection('messages')
+          .where('direction', isEqualTo: MessageDirection.outgoing.name)
+          .count()
+          .get();
+      final actual = snap.count ?? 0;
+      if (actual != currentValue) {
+        await _firestore.user(ownerId).update({'totalMessages': actual});
+      }
+      return actual;
+    } catch (_) {
+      return null;
     }
   }
 
