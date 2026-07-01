@@ -104,6 +104,19 @@ service cloud.firestore {
         allow read, write: if isAdmin();
       }
 
+
+      // ============ Internal Notes (per conversation subcollection) ============
+      match /conversations/{convId}/notes/{noteId} {
+        allow read, write: if isOwner(userId) || isAgentOf(userId);
+        allow read: if isAdmin();
+      }
+
+      // ============ Scheduled Messages ============
+      match /scheduled_messages/{msgId} {
+        allow read, write: if isOwner(userId) || isAgentOf(userId);
+        allow read: if isAdmin();
+      }
+
       // ============ Tags ============
       match /tags/{tagId} {
         allow read, write: if isOwner(userId) || isAgentOf(userId);
