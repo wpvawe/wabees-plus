@@ -254,7 +254,7 @@ class PlanRepository {
     // Also send push to admins via backend so it arrives in background
     try {
       final dio = Dio(BaseOptions(
-        baseUrl: 'https://api.wabees.live/api',
+        baseUrl: 'https://api.wabees.live',
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 30),
       ));
