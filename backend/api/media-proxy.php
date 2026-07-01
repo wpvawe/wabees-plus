@@ -1,199 +1,163 @@
 <?php
 /**
- * WABEES — Media Proxy v2 (Range-aware)
- *
- * - Resolves agent → owner for access token
- * - Supports HTTP Range requests (needed for audio/video streaming)
- *
- * GET /api/media-proxy.php?id=<mediaId>&uid=<userId>
+ * WABEES — WhatsApp media proxy
+ * Streams WhatsApp Cloud media with the correct content type and optional
+ * Content-Disposition so documents download in their real format (docx, rtf,
+ * pdf, apk, etc.) instead of a browser-generated .bin file.
  */
 
 require_once __DIR__ . '/../config/firebase-config.php';
 
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Headers: Range');
+header('Access-Control-Allow-Methods: GET, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Range');
 
-$mediaId = $_GET['id']  ?? '';
-$userId  = $_GET['uid'] ?? '';
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
 
-if (empty($mediaId) || empty($userId)) {
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    http_response_code(405);
+    echo 'Method not allowed';
+    exit;
+}
+
+$mediaId = trim($_GET['id'] ?? $_GET['media_id'] ?? '');
+$uid = trim($_GET['uid'] ?? $_GET['userId'] ?? '');
+$forceDownload = isset($_GET['download']) && $_GET['download'] !== '0';
+$requestedName = trim($_GET['filename'] ?? '');
+$requestedMime = trim($_GET['mime'] ?? '');
+
+if ($mediaId === '' || $uid === '') {
     http_response_code(400);
-    header('Content-Type: application/json');
-    echo json_encode(['error' => 'id and uid required']);
+    echo 'Missing media id or uid';
     exit;
 }
 
-// ── Resolve owner (agents → owner) ──────────────────────────────
-function _proxy_resolve_owner(string $uid): string {
-    $cacheKey = "wabees_owner_{$uid}";
-    if (function_exists('apcu_fetch')) {
-        $v = apcu_fetch($cacheKey, $ok);
-        if ($ok && $v) return $v;
-    }
-    $doc = firestore_get("users/{$uid}");
-    $owner = ($doc['code'] === 200)
-        ? ($doc['data']['fields']['dataOwner']['stringValue'] ?? null)
-        : null;
-    $result = ($owner && $owner !== $uid) ? $owner : $uid;
-    if (function_exists('apcu_store')) apcu_store($cacheKey, $result, 3600);
-    return $result;
-}
-
-// ── Get access token for owner ───────────────────────────────────
-function _proxy_get_token(string $ownerUid): ?string {
-    $cacheKey = "wabees_media_token_{$ownerUid}";
-    if (function_exists('apcu_fetch')) {
-        $v = apcu_fetch($cacheKey, $ok);
-        if ($ok && $v) return $v;
-    }
-    // Try whatsapp_config/config.accessToken
-    $cfg = firestore_get("users/{$ownerUid}/whatsapp_config/config");
-    if ($cfg['code'] === 200) {
-        $token = $cfg['data']['fields']['accessToken']['stringValue'] ?? null;
-        if ($token) {
-            if (function_exists('apcu_store')) apcu_store($cacheKey, $token, 1800);
-            return $token;
-        }
-    }
-    // Fallback: user doc.whatsappAccessToken
-    $udoc = firestore_get("users/{$ownerUid}");
-    if ($udoc['code'] === 200) {
-        $token = $udoc['data']['fields']['whatsappAccessToken']['stringValue'] ?? null;
-        if ($token) {
-            if (function_exists('apcu_store')) apcu_store($cacheKey, $token, 1800);
-            return $token;
-        }
-    }
-    return null;
-}
-
-$ownerUid    = _proxy_resolve_owner($userId);
-$accessToken = _proxy_get_token($ownerUid);
-
+$tokens = get_user_access_token($uid);
+$accessToken = $tokens['accessToken'] ?? null;
 if (!$accessToken) {
-    http_response_code(403);
-    header('Content-Type: application/json');
-    echo json_encode(['error' => 'Access token not found', 'uid' => $userId, 'owner' => $ownerUid]);
+    http_response_code(401);
+    echo 'WhatsApp token not found';
     exit;
 }
 
-// ── Step 1: Get WhatsApp download URL ────────────────────────────
+function proxy_extension_for_mime($mimeType)
+{
+    $mime = strtolower(trim(explode(';', (string) $mimeType)[0]));
+    $map = [
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/gif' => 'gif',
+        'image/webp' => 'webp',
+        'video/mp4' => 'mp4',
+        'video/3gpp' => '3gp',
+        'audio/mpeg' => 'mp3',
+        'audio/ogg' => 'ogg',
+        'audio/amr' => 'amr',
+        'audio/aac' => 'aac',
+        'audio/mp4' => 'm4a',
+        'application/pdf' => 'pdf',
+        'application/rtf' => 'rtf',
+        'text/rtf' => 'rtf',
+        'text/plain' => 'txt',
+        'text/csv' => 'csv',
+        'application/msword' => 'doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx',
+        'application/vnd.ms-excel' => 'xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'xlsx',
+        'application/vnd.ms-powerpoint' => 'ppt',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation' => 'pptx',
+        'application/zip' => 'zip',
+        'application/x-rar-compressed' => 'rar',
+        'application/x-7z-compressed' => '7z',
+        'application/vnd.android.package-archive' => 'apk',
+    ];
+    if (isset($map[$mime])) return $map[$mime];
+    if (strpos($mime, 'image/') === 0) return str_replace('jpeg', 'jpg', substr($mime, 6));
+    if (strpos($mime, 'video/') === 0) return substr($mime, 6);
+    if (strpos($mime, 'audio/') === 0) return str_replace('mpeg', 'mp3', substr($mime, 6));
+    return 'bin';
+}
+
+function proxy_safe_filename($name, $mimeType, $fallback)
+{
+    $clean = trim((string) $name);
+    if ($clean === '') $clean = $fallback;
+    $clean = preg_replace('/[\\\/\:\*\?"\<\>\|]+/', '_', $clean);
+    $ext = proxy_extension_for_mime($mimeType);
+    if (!preg_match('/\.[A-Za-z0-9]{1,8}$/', $clean) || preg_match('/\.bin$/i', $clean)) {
+        $clean = preg_replace('/\.bin$/i', '', $clean) . '.' . $ext;
+    }
+    return $clean;
+}
+
+// 1) Ask Meta for the temporary signed media URL and metadata.
+$metaUrl = 'https://graph.facebook.com/v21.0/' . rawurlencode($mediaId);
 $ch = curl_init();
 curl_setopt_array($ch, [
-    CURLOPT_URL            => "https://graph.facebook.com/v21.0/{$mediaId}",
+    CURLOPT_URL => $metaUrl,
     CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT        => 15,
-    CURLOPT_CONNECTTIMEOUT => 5,
-    CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4,
-    CURLOPT_HTTPHEADER     => ["Authorization: Bearer {$accessToken}"],
+    CURLOPT_TIMEOUT => 12,
+    CURLOPT_CONNECTTIMEOUT => 4,
+    CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
+    CURLOPT_NOSIGNAL => 1,
+    CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $accessToken],
 ]);
 $metaResp = curl_exec($ch);
 $metaCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
-if ($metaCode !== 200) {
+if ($metaCode < 200 || $metaCode >= 300) {
     http_response_code(502);
-    header('Content-Type: application/json');
-    echo json_encode(['error' => 'WhatsApp meta fetch failed', 'code' => $metaCode]);
+    echo 'Could not fetch media metadata';
     exit;
 }
 
-$meta        = json_decode($metaResp, true);
-$downloadUrl = $meta['url'] ?? null;
-$mimeType    = $meta['mime_type'] ?? 'application/octet-stream';
-$fileSize    = isset($meta['file_size']) ? (int)$meta['file_size'] : 0;
+$meta = json_decode($metaResp, true) ?: [];
+$downloadUrl = $meta['url'] ?? '';
+$mimeType = $requestedMime ?: ($meta['mime_type'] ?? 'application/octet-stream');
+$fileSize = isset($meta['file_size']) ? (int) $meta['file_size'] : null;
+$filename = proxy_safe_filename($requestedName, $mimeType, 'whatsapp-' . $mediaId);
 
-if (!$downloadUrl) {
+if ($downloadUrl === '') {
     http_response_code(404);
-    header('Content-Type: application/json');
-    echo json_encode(['error' => 'No download URL in WhatsApp response']);
+    echo 'Media URL not found';
     exit;
 }
 
-// ── Detect extension ──────────────────────────────────────────────
-$extMap = [
-    'image/jpeg' => 'jpg', 'image/png'  => 'png', 'image/gif'  => 'gif',
-    'image/webp' => 'webp','image/heic' => 'heic','image/bmp'  => 'bmp',
-    'video/mp4'  => 'mp4', 'video/3gpp' => '3gp',
-    'audio/mpeg' => 'mp3', 'audio/ogg'  => 'ogg', 'audio/ogg; codecs=opus' => 'ogg',
-    'audio/amr'  => 'amr', 'audio/aac'  => 'aac', 'audio/mp4'  => 'm4a',
-    'application/pdf' => 'pdf',
-];
-$cleanMime = explode(';', $mimeType)[0];
-$ext       = $extMap[$cleanMime] ?? ($extMap[$mimeType] ?? 'bin');
-$filename  = "media_{$mediaId}.{$ext}";
+// 2) Stream the real file through PHP. Buffering is acceptable here because
+// WhatsApp business media is capped and PHP shared hosting handles this better
+// than pass-through curl callbacks with auth headers.
+$ch = curl_init();
+curl_setopt_array($ch, [
+    CURLOPT_URL => $downloadUrl,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_FOLLOWLOCATION => true,
+    CURLOPT_TIMEOUT => 60,
+    CURLOPT_CONNECTTIMEOUT => 5,
+    CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
+    CURLOPT_NOSIGNAL => 1,
+    CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $accessToken],
+]);
+$bytes = curl_exec($ch);
+$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$actualType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+curl_close($ch);
 
-// ── Check local cache ─────────────────────────────────────────────
-$cacheDir  = __DIR__ . '/../uploads/media/';
-$cachePath = $cacheDir . "proxy_{$mediaId}.{$ext}";
-if (!is_dir($cacheDir)) @mkdir($cacheDir, 0755, true);
-
-$useCache = false;
-if (file_exists($cachePath) && filesize($cachePath) > 0) {
-    $useCache = true;
-    $fileSize = filesize($cachePath);
+if ($code < 200 || $code >= 300 || $bytes === false || $bytes === '') {
+    http_response_code(502);
+    echo 'Could not download media';
+    exit;
 }
 
-// ── Step 2: Download if not cached ───────────────────────────────
-if (!$useCache) {
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL            => $downloadUrl,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 120,
-        CURLOPT_CONNECTTIMEOUT => 10,
-        CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_HTTPHEADER     => ["Authorization: Bearer {$accessToken}"],
-    ]);
-    $fileContent = curl_exec($ch);
-    $dlCode      = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($dlCode !== 200 || empty($fileContent)) {
-        http_response_code(502);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'Media download failed', 'code' => $dlCode]);
-        exit;
-    }
-
-    @file_put_contents($cachePath, $fileContent);
-    $fileSize = strlen($fileContent);
-}
-
-// ── Step 3: Serve with Range support ─────────────────────────────
-$rangeHeader = $_SERVER['HTTP_RANGE'] ?? null;
-
-header("Content-Type: $mimeType");
-header("Accept-Ranges: bytes");
-header("Cache-Control: public, max-age=86400");
-header("Content-Disposition: inline; filename=\"{$filename}\"");
-
-if ($rangeHeader && preg_match('/bytes=(\d*)-(\d*)/', $rangeHeader, $m)) {
-    // Partial content response
-    $start = $m[1] !== '' ? (int)$m[1] : 0;
-    $end   = $m[2] !== '' ? (int)$m[2] : $fileSize - 1;
-    $end   = min($end, $fileSize - 1);
-    $length = $end - $start + 1;
-
-    http_response_code(206);
-    header("Content-Range: bytes {$start}-{$end}/{$fileSize}");
-    header("Content-Length: {$length}");
-
-    if ($useCache) {
-        $fp = fopen($cachePath, 'rb');
-        fseek($fp, $start);
-        echo fread($fp, $length);
-        fclose($fp);
-    } else {
-        echo substr($fileContent, $start, $length);
-    }
-} else {
-    // Full content
-    header("Content-Length: {$fileSize}");
-    if ($useCache) {
-        readfile($cachePath);
-    } else {
-        echo $fileContent;
-    }
-}
+$contentType = $requestedMime ?: ($actualType ?: $mimeType ?: 'application/octet-stream');
+header('Content-Type: ' . $contentType);
+header('Content-Length: ' . strlen($bytes));
+header('Cache-Control: private, max-age=300');
+header('X-Content-Type-Options: nosniff');
+if ($fileSize) header('X-Wabees-File-Size: ' . $fileSize);
+$disp = $forceDownload ? 'attachment' : 'inline';
+header("Content-Disposition: $disp; filename=\"" . addcslashes($filename, "\\\"") . "\"; filename*=UTF-8''" . rawurlencode($filename));
+echo $bytes;
