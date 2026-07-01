@@ -115,3 +115,12 @@
 # Suppress known R8 notes
 -dontnote **
 
+
+# Google Sign-In v7 + Credential Manager (CRITICAL — required after account picker)
+-keep class androidx.credentials.** { *; }
+-keep class androidx.credentials.playservices.** { *; }
+-dontwarn androidx.credentials.**
+-keep class com.google.android.libraries.identity.googleid.** { *; }
+-dontwarn com.google.android.libraries.identity.googleid.**
+-keep class com.google.android.gms.auth.api.identity.** { *; }
+-dontwarn com.google.android.gms.auth.api.identity.**

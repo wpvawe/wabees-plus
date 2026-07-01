@@ -39,14 +39,42 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # Optional: decode release keystore from secret. If secret missing, build
+      # falls back to debug signing (won't match Firebase SHA-1 → Google login fails).
+      - name: Decode release keystore
+        if: env.RELEASE_KEYSTORE_BASE64 != ''
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > android/app/release.jks
+          cat > android/key.properties <<KP
+          storeFile=app/release.jks
+          storePassword=$RELEASE_STORE_PASSWORD
+          keyAlias=$RELEASE_KEY_ALIAS
+          keyPassword=$RELEASE_KEY_PASSWORD
+          KP
+          echo "✅ Release keystore configured"
+
+      - name: Print signing SHA fingerprints (register these in Firebase Console)
+        working-directory: android
+        run: |
+          echo "===================== SIGNING REPORT ====================="
+          ./gradlew :app:signingReport 2>&1 | grep -E "Variant|Config|SHA1|SHA-256|Store" || true
+          echo "=========================================================="
+
       - name: Analyze (non-blocking)
         run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
 
-      - name: Build APK (release, split-per-abi)
-        run: flutter build apk --release --split-per-abi
+      - name: Build APK (release, split-per-abi, compressed)
+        run: flutter build apk --release --split-per-abi --shrink --obfuscate --split-debug-info=build/symbols
 
-      - name: Build universal APK (release)
-        run: flutter build apk --release
+      - name: List built APKs with sizes
+        run: |
+          echo "=== Built APKs ==="
+          ls -lh build/app/outputs/flutter-apk/*.apk
 
       - name: Upload split APKs
         uses: actions/upload-artifact@v4
@@ -56,10 +84,10 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload universal APK
+      - name: Upload debug symbols (for crash de-obfuscation)
         uses: actions/upload-artifact@v4
         with:
-          name: wabees-apk-universal
-          path: build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
+          name: wabees-debug-symbols
+          path: build/symbols/
+          if-no-files-found: warn
           retention-days: 30
