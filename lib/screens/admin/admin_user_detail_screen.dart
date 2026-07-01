@@ -281,46 +281,6 @@ class AdminUserDetailScreen extends ConsumerWidget {
             },
           ),
 
-          const SizedBox(height: AppDimens.sm),
-
-          // ============ LOAN CHECK FEATURE TOGGLE ============
-          StreamBuilder<DocumentSnapshot>(
-            stream: FirebaseFirestore.instance.collection('users').doc(user.id).snapshots(),
-            builder: (context, snap) {
-              final data = snap.data?.data() as Map<String, dynamic>?;
-              final loanOn = data?['loanCheckEnabled'] ?? false;
-              return Card(
-                child: SwitchListTile(
-                  secondary: Icon(
-                    Icons.account_balance_outlined,
-                    color: loanOn ? const Color(0xFF7C3AED) : Colors.grey,
-                  ),
-                  title: Text(loanOn ? 'Loan Check Enabled' : 'Loan Check Disabled'),
-                  subtitle: Text(
-                    loanOn
-                        ? 'AI bot checks CNIC/reference in both loan databases'
-                        : 'Enable to allow AI bot to check loan status via CNIC/reference',
-                  ),
-                  value: loanOn,
-                  activeThumbColor: const Color(0xFF7C3AED),
-                  onChanged: (val) async {
-                    await ref.read(adminNotifierProvider.notifier).updateUserField(
-                          user.id,
-                          'loanCheckEnabled',
-                          val,
-                        );
-                    if (context.mounted) {
-                      WbSnackbar.showSuccess(
-                        context,
-                        val ? 'Loan Check enabled for ${user.businessName}' : 'Loan Check disabled',
-                      );
-                    }
-                  },
-                ),
-              );
-            },
-          ),
-
           const SizedBox(height: AppDimens.md),
 
           // ============ SUBSCRIPTION MANAGEMENT ============
