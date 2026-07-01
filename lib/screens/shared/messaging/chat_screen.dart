@@ -902,7 +902,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _downloadMedia(MessageModel message, String userId) async {
     String? url;
     if (message.mediaId != null && message.mediaId!.isNotEmpty && userId.isNotEmpty) {
-      url = 'https://api.wabees.live/api/media-proxy.php?id=${Uri.encodeComponent(message.mediaId!)}&uid=${Uri.encodeComponent(userId)}';
+      url = 'https://api.wabees.live/media-proxy.php?id=${Uri.encodeComponent(message.mediaId!)}&uid=${Uri.encodeComponent(userId)}';
     } else if (message.mediaUrl != null && message.mediaUrl!.isNotEmpty) {
       url = message.mediaUrl;
     }
@@ -2205,7 +2205,7 @@ class _MediaIndicator extends StatelessWidget {
   String? get _resolvedUrl {
     // If we have mediaId, ALWAYS use proxy URL (guaranteed to work)
     if (message.mediaId != null && message.mediaId!.isNotEmpty && userId.isNotEmpty) {
-      return 'https://api.wabees.live/api/media-proxy.php?id=${Uri.encodeComponent(message.mediaId!)}&uid=${Uri.encodeComponent(userId)}';
+      return 'https://api.wabees.live/media-proxy.php?id=${Uri.encodeComponent(message.mediaId!)}&uid=${Uri.encodeComponent(userId)}';
     }
     // Fallback: use stored mediaUrl (for sent messages that have URL but no mediaId)
     if (message.mediaUrl != null && message.mediaUrl!.isNotEmpty) return message.mediaUrl;
