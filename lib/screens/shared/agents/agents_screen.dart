@@ -18,7 +18,7 @@ class AgentsScreen extends ConsumerStatefulWidget {
 }
 
 class _AgentsScreenState extends ConsumerState<AgentsScreen> {
-  static const _apiBase = 'https://api.wabees.live/api';
+  static const _apiBase = 'https://api.wabees.live';
   bool _isTransferring = false;
   bool _isAddingAgent = false;
 
