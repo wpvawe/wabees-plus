@@ -9,7 +9,7 @@ import '../models/notification/app_notification_model.dart';
 class SupportRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final Dio _dio = Dio(BaseOptions(
-    baseUrl: 'https://api.wabees.live/api',
+    baseUrl: 'https://api.wabees.live',
     connectTimeout: const Duration(seconds: 30),
     receiveTimeout: const Duration(seconds: 60),
   ));
