@@ -28,7 +28,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   final _codeController = TextEditingController();
 
   final _dio = Dio(BaseOptions(
-    baseUrl: 'https://api.wabees.live/api',
+    baseUrl: 'https://api.wabees.live',
     connectTimeout: const Duration(seconds: 15),
     receiveTimeout: const Duration(seconds: 15),
   ));
