@@ -60,7 +60,7 @@ jobs:
         working-directory: android
         run: |
           echo "===================== SIGNING REPORT ====================="
-          ./gradlew :app:signingReport 2>&1 | grep -E "Variant|Config|SHA1|SHA-256|Store" || true
+          ./gradlew :app:signingReport --console=plain 2>&1 | tee /tmp/sr.txt | grep -iE "variant|config|sha1|sha-256|sha256|store|alias|valid" || tail -200 /tmp/sr.txt
           echo "=========================================================="
 
       - name: Analyze (non-blocking)
