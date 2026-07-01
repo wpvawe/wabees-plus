@@ -172,63 +172,30 @@ class MessageRepository {
       );
     }
 
-    // Bug 5 fix: check if reply window is open for this contact.
-    // WhatsApp only allows free-form text when a customer messaged in the last 24h.
-    // If no prior incoming message exists, the message WILL be rejected by WhatsApp
-    // even if the API returns 200. Warn the user to use a template instead.
-    try {
-      final convDoc = await _firestore.user(userId)
-          .collection('conversations')
-          .doc(contactPhone)
-          .get();
-      if (convDoc.exists) {
-        final data = convDoc.data()!;
-        final lastIncomingRaw = data['lastIncomingMessageAt'];
-        DateTime? lastIncoming;
-        if (lastIncomingRaw is Timestamp) {
-          lastIncoming = lastIncomingRaw.toDate();
-        } else if (lastIncomingRaw is String && lastIncomingRaw.isNotEmpty) {
-          lastIncoming = DateTime.tryParse(lastIncomingRaw);
-        }
-        // Reply window is closed (> 24h since last customer message, or never messaged)
-        final windowClosed = lastIncoming == null ||
-            DateTime.now().difference(lastIncoming).inHours >= 24;
-        if (windowClosed) {
-          return MessageModel(
-            id: '',
-            contactPhone: contactPhone,
-            contactName: contactName,
-            type: MessageType.text,
-            direction: MessageDirection.outgoing,
-            status: MessageStatus.failed,
-            body: text,
-            errorReason:
-                'Cannot send free-form message: the 24-hour reply window is closed or '
-                'this is a first-time contact. Please use a Template Message to '
-                'start the conversation.',
-            createdAt: DateTime.now(),
-          );
-        }
-      } else {
-        // No conversation document at all — this is a brand new contact.
-        // First-time messages MUST use a template on WhatsApp Business API.
-        return MessageModel(
-          id: '',
-          contactPhone: contactPhone,
-          contactName: contactName,
-          type: MessageType.text,
-          direction: MessageDirection.outgoing,
-          status: MessageStatus.failed,
-          body: text,
-          errorReason:
-              'First message to a new contact must be a Template Message. '
-              'Go to Templates and send an approved template to start this conversation.',
-          createdAt: DateTime.now(),
-        );
-      }
-    } catch (_) {
-      // If conversation check fails, proceed anyway (don't block the user)
+    // 24-hour reply window pre-check.
+    // WhatsApp only allows free-form messages when the customer has messaged in the
+    // last 24 hours. We first read conversations/{phone}.lastIncomingMessageAt, and
+    // if that field is missing/stale we fall back to scanning the messages
+    // subcollection for the most recent window-opening inbound message — this keeps
+    // the pre-check in sync with the banner UI (which also derives from messages).
+    final windowOpen = await _isReplyWindowOpen(userId, contactPhone);
+    if (windowOpen == false) {
+      return MessageModel(
+        id: '',
+        contactPhone: contactPhone,
+        contactName: contactName,
+        type: MessageType.text,
+        direction: MessageDirection.outgoing,
+        status: MessageStatus.failed,
+        body: text,
+        errorReason:
+            'Cannot send free-form message: the 24-hour reply window is closed. '
+            'Please use an approved Template Message to start this conversation.',
+        createdAt: DateTime.now(),
+      );
     }
+    // windowOpen == null → indeterminate (Firestore error / permission). Do NOT block;
+    // let WhatsApp be the source of truth and surface any 131047 error on failure.
 
     DocumentReference? msgRef;
 
@@ -298,6 +265,13 @@ class MessageRepository {
           errorMsg = rawError['message'] ?? errorMsg;
         } else if (rawError is String) {
           errorMsg = rawError;
+        }
+        // Self-heal: if Meta says the 24h window is actually closed, clear
+        // lastIncomingMessageAt so the chat banner + next pre-check agree.
+        if (_isWindowClosedError(errorMsg, rawError)) {
+          _clearLastIncomingMessageTime(userId, contactPhone);
+          errorMsg = 'The 24-hour reply window is closed. Please send an approved '
+              'Template Message to re-engage this contact.';
         }
         await msgRef.update({
           'status': MessageStatus.failed.name,
@@ -712,6 +686,102 @@ class MessageRepository {
       }
       await query.docs.first.reference.update(updates);
     }
+  }
+
+  // ============ 24-HOUR REPLY WINDOW HELPERS ============
+  /// Returns:
+  ///   true  → window is open (safe to send free-form)
+  ///   false → window is provably closed (block send with template hint)
+  ///   null  → indeterminate (Firestore error) — caller should NOT block
+  Future<bool?> _isReplyWindowOpen(String userId, String contactPhone) async {
+    try {
+      final now = DateTime.now();
+
+      // 1) Read the conversation doc first (fast path).
+      final convDoc = await _firestore.user(userId)
+          .collection('conversations')
+          .doc(contactPhone)
+          .get();
+      if (convDoc.exists) {
+        final raw = convDoc.data()!['lastIncomingMessageAt'];
+        DateTime? ts;
+        if (raw is Timestamp) ts = raw.toDate();
+        if (raw is String && raw.isNotEmpty) ts = DateTime.tryParse(raw);
+        if (ts != null && now.difference(ts).inHours < 24) return true;
+      }
+
+      // 2) Slow path — the field may be missing/stale (older webhook writes, or a
+      //    reaction/system event we intentionally do not persist). Scan the last
+      //    24h of inbound messages for a real window-opening type.
+      final cutoff = now.subtract(const Duration(hours: 24));
+      const windowOpeningTypes = <String>{
+        'text', 'image', 'video', 'audio', 'document',
+        'location', 'contact', 'interactive', 'button', 'order',
+      };
+      final snap = await _firestore.user(userId)
+          .collection('messages')
+          .where('contactPhone', isEqualTo: contactPhone)
+          .where('direction', isEqualTo: MessageDirection.incoming.name)
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(cutoff))
+          .orderBy('createdAt', descending: true)
+          .limit(20)
+          .get();
+      DateTime? latest;
+      for (final d in snap.docs) {
+        final data = d.data();
+        final type = (data['type'] as String?) ?? 'text';
+        if (!windowOpeningTypes.contains(type)) continue;
+        final ca = data['createdAt'];
+        if (ca is Timestamp) { latest = ca.toDate(); break; }
+        if (ca is String) { latest = DateTime.tryParse(ca); if (latest != null) break; }
+      }
+      if (latest != null && now.difference(latest).inHours < 24) {
+        // Self-heal: write the discovered value back so the banner + next
+        // pre-check agree without another scan.
+        try {
+          await _firestore.user(userId)
+              .collection('conversations')
+              .doc(contactPhone)
+              .set({'lastIncomingMessageAt': Timestamp.fromDate(latest)},
+                  SetOptions(merge: true));
+        } catch (_) {}
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('[MessageRepo] _isReplyWindowOpen error: $e');
+      return null; // indeterminate — do not block
+    }
+  }
+
+  /// Clears lastIncomingMessageAt on all matching conversation docs. Called when
+  /// WhatsApp rejects with error 131047 / 131051 / 131026 so the banner immediately
+  /// reflects reality instead of continuing to show "window open".
+  Future<void> _clearLastIncomingMessageTime(String userId, String contactPhone) async {
+    final docs = await _findAllConversationDocs(userId, contactPhone);
+    for (final doc in docs) {
+      try {
+        await doc.update({'lastIncomingMessageAt': FieldValue.delete()});
+      } catch (_) {}
+    }
+  }
+
+  /// Returns true if the WhatsApp API error indicates the 24-hour reply
+  /// window is closed (re-engagement required).
+  bool _isWindowClosedError(String? errorMsg, dynamic errorData) {
+    final msg = (errorMsg ?? '').toLowerCase();
+    if (msg.contains('24 hours') ||
+        msg.contains('re-engagement') ||
+        msg.contains('reengagement') ||
+        msg.contains('outside the allowed window') ||
+        msg.contains('customer service window')) {
+      return true;
+    }
+    if (errorData is Map) {
+      final code = errorData['code']?.toString() ?? '';
+      if (code == '131047' || code == '131051' || code == '131026') return true;
+    }
+    return false;
   }
 
   // ============ UPDATE LAST INCOMING MESSAGE TIME (Repair) ============
