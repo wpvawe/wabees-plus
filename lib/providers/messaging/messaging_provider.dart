@@ -87,6 +87,10 @@ class SendMessageNotifier extends StateNotifier<SendMessageState> {
     required String contactPhone,
     required String contactName,
     required String text,
+    String? replyToId,
+    String? replyToBody,
+    String? replyToWamid,
+    String? replyToType,
   }) async {
     // ===== ANTI-BAN CHECK =====
     final banCheck = _antiBan.canSend(
@@ -105,6 +109,10 @@ class SendMessageNotifier extends StateNotifier<SendMessageState> {
       contactPhone: contactPhone,
       contactName: contactName,
       text: text,
+      replyToId: replyToId,
+      replyToBody: replyToBody,
+      replyToWamid: replyToWamid,
+      replyToType: replyToType,
     );
 
     if (result != null && result.status != MessageStatus.failed) {
@@ -131,6 +139,10 @@ class SendMessageNotifier extends StateNotifier<SendMessageState> {
     String? fileName,
     int? fileSize,
     bool isVoice = false, // true = real WhatsApp voice note
+    String? replyToId,
+    String? replyToBody,
+    String? replyToWamid,
+    String? replyToType,
   }) async {
     // ===== ANTI-BAN CHECK =====
     final banCheck = _antiBan.canSend(
@@ -155,6 +167,10 @@ class SendMessageNotifier extends StateNotifier<SendMessageState> {
       fileName: fileName,
       fileSize: fileSize,
       isVoice: isVoice,
+      replyToId: replyToId,
+      replyToBody: replyToBody,
+      replyToWamid: replyToWamid,
+      replyToType: replyToType,
     );
 
     if (result != null && result.status != MessageStatus.failed) {

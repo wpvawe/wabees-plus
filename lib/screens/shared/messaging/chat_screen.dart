@@ -29,6 +29,7 @@ import '../../../data/models/message/message_type.dart';
 import '../../../providers/messaging/messaging_provider.dart';
 import '../../../providers/auth/auth_provider.dart';
 import '../../../providers/whatsapp/whatsapp_provider.dart';
+import '../../../data/models/whatsapp/whatsapp_api_response.dart';
 import '../../../providers/plans/plan_provider.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/utils/phone_utils.dart';
@@ -66,6 +67,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _ringReady = false; // Prevents ring during initial load
   bool _initialScrollDone = false; // Scroll to bottom on first load
   bool _showScrollToBottom = false; // Show floating scroll-to-bottom button
+  MessageModel? _replyingTo; // Message currently being replied to
+  String? _lastInboundWamid; // wamid of latest incoming msg (for typing indicator)
+  Timer? _typingTimer;
+  String? _typingLastWamid;
+  DateTime? _typingLastAt;
 
   @override
   void initState() {
@@ -73,6 +79,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _messageController.addListener(() {
       final hasText = _messageController.text.trim().isNotEmpty;
       if (hasText != _hasText) setState(() => _hasText = hasText);
+      _scheduleTypingIndicator();
     });
     // Scroll listener for loading more messages on scroll up + scroll-to-bottom FAB
     _scrollController.addListener(() {
@@ -236,6 +243,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final url = uploadResult.data!['url'] as String;
       final mediaId = uploadResult.data!['media_id'] as String?;
 
+      final reply = _replyingTo;
+      if (reply != null && mounted) setState(() => _replyingTo = null);
       ref.read(sendMessageProvider.notifier).sendMedia(
         contactPhone: widget.contactPhone,
         contactName: widget.contactName,
@@ -244,6 +253,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         mediaId: mediaId,
         fileName: 'Voice message',
         isVoice: true, // ← Real WhatsApp voice note (waveform mic icon)
+        replyToId: reply?.id,
+        replyToBody: reply != null ? _replyPreview(reply) : null,
+        replyToWamid: reply?.whatsappMessageId,
+        replyToType: reply?.type.name,
       );
     } catch (e) {
       debugPrint('Voice send error: $e');
@@ -277,6 +290,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void dispose() {
     _recordTimer?.cancel();
+    _typingTimer?.cancel();
     _audioRecorder.dispose();
     // Unlock conversation
     final user = ref.read(currentUserProvider);
@@ -293,6 +307,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.dispose();
   }
 
+  /// Debounce (350ms) + throttle (20s per wamid) outbound typing indicator.
+  /// Meta scopes typing to a read receipt so we need a known inbound wamid.
+  void _scheduleTypingIndicator() {
+    final wamid = _lastInboundWamid;
+    if (wamid == null || wamid.isEmpty) return;
+    _typingTimer?.cancel();
+    _typingTimer = Timer(const Duration(milliseconds: 350), () {
+      final now = DateTime.now();
+      if (_typingLastWamid == wamid &&
+          _typingLastAt != null &&
+          now.difference(_typingLastAt!).inSeconds < 20) {
+        return;
+      }
+      _typingLastWamid = wamid;
+      _typingLastAt = now;
+      final user = ref.read(currentUserProvider);
+      if (user == null) return;
+      ref.read(whatsappRepositoryProvider)
+          .sendTypingIndicator(userId: user.id, messageId: wamid)
+          .catchError((_) => WhatsappApiResponse.error('ignored'));
+    });
+  }
+
   void _sendMessage() {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
@@ -303,11 +340,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     _messageController.clear();
+    final reply = _replyingTo;
+    if (reply != null) setState(() => _replyingTo = null);
     ref.read(sendMessageProvider.notifier).sendText(
       contactPhone: widget.contactPhone,
       contactName: widget.contactName,
       text: text,
+      replyToId: reply?.id,
+      replyToBody: reply != null ? _replyPreview(reply) : null,
+      replyToWamid: reply?.whatsappMessageId,
+      replyToType: reply?.type.name,
     );
+  }
+
+  /// WhatsApp-style non-empty preview for the quoted message
+  String _replyPreview(MessageModel m) {
+    final text = m.body.trim().isNotEmpty ? m.body.trim() : (m.caption?.trim() ?? '');
+    if (text.isNotEmpty) return text.length > 200 ? text.substring(0, 200) : text;
+    switch (m.type) {
+      case MessageType.image:    return '📷 Photo';
+      case MessageType.sticker:  return '💟 Sticker';
+      case MessageType.video:    return '🎥 Video';
+      case MessageType.audio:    return '🎤 Voice message';
+      case MessageType.document: return '📄 ${m.fileName ?? 'Document'}';
+      case MessageType.location: return '📍 Location';
+      case MessageType.contact:  return '👤 Contact';
+      case MessageType.template: return '📋 Template';
+      case MessageType.interactive: return '🔘 Interactive';
+      case MessageType.button:   return '🔘 Button';
+      case MessageType.order:    return '🛒 Order';
+      default: return '[${m.type.name}]';
+    }
   }
 
   void _showSubscriptionExpiredDialog() {
@@ -497,6 +560,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final mediaId = uploadResult.data!['media_id'] as String?;
 
       // Send via messaging provider
+      final reply = _replyingTo;
+      if (reply != null && mounted) setState(() => _replyingTo = null);
       ref.read(sendMessageProvider.notifier).sendMedia(
         contactPhone: widget.contactPhone,
         contactName: widget.contactName,
@@ -505,6 +570,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         mediaId: mediaId,
         caption: caption,
         fileName: picked.name,
+        replyToId: reply?.id,
+        replyToBody: reply != null ? _replyPreview(reply) : null,
+        replyToWamid: reply?.whatsappMessageId,
+        replyToType: reply?.type.name,
       );
     } catch (e) {
       if (mounted) WbSnackbar.showError(context, 'Failed to pick image');
@@ -583,6 +652,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final mediaId = uploadResult.data!['media_id'] as String?;
 
       // Send via messaging provider
+      final reply = _replyingTo;
+      if (reply != null && mounted) setState(() => _replyingTo = null);
       ref.read(sendMessageProvider.notifier).sendMedia(
         contactPhone: widget.contactPhone,
         contactName: widget.contactName,
@@ -592,6 +663,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         caption: caption,
         fileName: file.name,
         fileSize: file.size,
+        replyToId: reply?.id,
+        replyToBody: reply != null ? _replyPreview(reply) : null,
+        replyToWamid: reply?.whatsappMessageId,
+        replyToType: reply?.type.name,
       );
     } catch (e) {
       debugPrint('Media pick/send error: $e');
@@ -665,6 +740,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
             ),
             const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.reply, color: Colors.teal),
+              title: const Text('Reply'),
+              onTap: () {
+                Navigator.pop(ctx);
+                setState(() => _replyingTo = message);
+              },
+            ),
             if (message.status == MessageStatus.failed) ...[
               ListTile(
                 leading: const Icon(Icons.refresh, color: Colors.orange),
@@ -751,64 +834,68 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  /// Toggle a reaction (WhatsApp-style): tapping the same emoji removes it.
+  /// Uses the PHP proxy (whatsappRepository.sendReaction) so we don't hit Meta directly.
   void _sendReaction(MessageModel message, String emoji) async {
     final user = ref.read(currentUserProvider);
     if (user == null) return;
-    
-    // Store reaction in Firestore directly
-    final msgId = 'msg_${DateTime.now().millisecondsSinceEpoch}';
-    await FirebaseFirestore.instance
-        .collection('users').doc(user.id)
-        .collection('messages').doc(msgId)
-        .set({
-      'contactPhone': message.contactPhone,
-      'contactName': message.contactName,
-      'type': 'reaction',
-      'direction': 'outgoing',
-      'status': 'sent',
-      'body': emoji,
-      'reactionEmoji': emoji,
-      'reactionMsgId': message.id,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-    
-    // Send reaction via WhatsApp API (only if we have the WhatsApp message ID)
-    if (message.whatsappMessageId != null && message.whatsappMessageId!.isNotEmpty) {
-      try {
-        final configDoc = await FirebaseFirestore.instance
-            .collection('users').doc(user.id)
-            .collection('whatsapp_config').doc('config')
-            .get();
-        final accessToken = configDoc.data()?['accessToken'] as String?;
-        final phoneNumberId = configDoc.data()?['phoneNumberId'] as String?;
-        
-        if (accessToken != null && phoneNumberId != null) {
-          final url = Uri.parse('https://graph.facebook.com/v21.0/$phoneNumberId/messages');
-          final response = await http.post(
-            url,
-            headers: {
-              'Authorization': 'Bearer $accessToken',
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'messaging_product': 'whatsapp',
-              'to': message.contactPhone.replaceAll('+', ''),
-              'type': 'reaction',
-              'reaction': {
-                'message_id': message.whatsappMessageId,
-                'emoji': emoji,
-              },
-            }),
-          );
-          if (response.statusCode == 200) {
-            debugPrint('Reaction sent to WhatsApp: $emoji');
-          } else {
-            debugPrint('Reaction API failed: ${response.statusCode} ${response.body}');
-          }
-        }
-      } catch (e) {
-        debugPrint('Reaction error: $e');
+    final ownerId = user.dataOwner ?? user.id;
+    final fs = FirebaseFirestore.instance;
+    final now = DateTime.now();
+
+    // Find any existing outgoing reaction from this user on this message
+    QuerySnapshot<Map<String, dynamic>>? existing;
+    try {
+      existing = await fs
+          .collection('users').doc(ownerId)
+          .collection('messages')
+          .where('type', isEqualTo: 'reaction')
+          .where('reactionMsgId', isEqualTo: message.id)
+          .where('direction', isEqualTo: 'outgoing')
+          .limit(5)
+          .get();
+    } catch (_) {}
+
+    final sameEmojiExists = existing?.docs.any((d) => (d.data()['reactionEmoji'] ?? '') == emoji) ?? false;
+    final outboundEmoji = sameEmojiExists ? '' : emoji; // '' removes on WhatsApp side
+
+    // Update Firestore first (optimistic, mirrors what webhook would echo back)
+    if (existing != null) {
+      for (final d in existing.docs) {
+        try { await d.reference.delete(); } catch (_) {}
       }
+    }
+    if (!sameEmojiExists) {
+      final msgId = 'msg_${now.millisecondsSinceEpoch}';
+      await fs
+          .collection('users').doc(ownerId)
+          .collection('messages').doc(msgId)
+          .set({
+        'contactPhone': message.contactPhone,
+        'contactName': message.contactName,
+        'type': 'reaction',
+        'direction': 'outgoing',
+        'status': 'sent',
+        'body': emoji,
+        'reactionEmoji': emoji,
+        'reactionMsgId': message.id,
+        'reactionAt': Timestamp.fromDate(now),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    // Send to WhatsApp via PHP proxy (only if we have the wamid)
+    final wamid = message.whatsappMessageId;
+    if (wamid == null || wamid.isEmpty) return;
+    try {
+      await ref.read(whatsappRepositoryProvider).sendReaction(
+        userId: ownerId,
+        to: message.contactPhone.replaceAll('+', ''),
+        messageId: wamid,
+        emoji: outboundEmoji,
+      );
+    } catch (e) {
+      debugPrint('Reaction error: $e');
     }
   }
 
@@ -1304,12 +1391,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 // Build reaction map (reactionMsgId → emoji) and filter reactions out
                 final reactionMap = <String, String>{};
                 final displayMessages = <MessageModel>[];
+                String? latestInboundWamid;
                 for (final m in messages) {
                   if (m.type == MessageType.reaction && m.reactionMsgId != null) {
                     reactionMap[m.reactionMsgId!] = m.reactionEmoji ?? '❤️';
                   } else {
                     displayMessages.add(m);
                   }
+                  if (m.direction.isIncoming &&
+                      m.whatsappMessageId != null &&
+                      m.whatsappMessageId!.isNotEmpty) {
+                    latestInboundWamid = m.whatsappMessageId;
+                  }
+                }
+                if (latestInboundWamid != _lastInboundWamid) {
+                  // Update outside of build to avoid nested setState during build
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _lastInboundWamid = latestInboundWamid;
+                  });
                 }
 
                 return ListView.builder(
@@ -1641,10 +1740,62 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ],
               ),
               child: SafeArea(
-                child: Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    IconButton(
-                      onPressed: _showAttachmentOptions,
+                    if (_replyingTo != null)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+                          border: Border(
+                            left: BorderSide(color: AppColors.primary, width: 3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _replyingTo!.direction.isOutgoing ? 'You' : _replyingTo!.contactName,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _replyPreview(_replyingTo!),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 18),
+                              onPressed: () => setState(() => _replyingTo = null),
+                              tooltip: 'Cancel reply',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: _showAttachmentOptions,
                       icon: Icon(
                         Icons.attach_file,
                         color: theme.colorScheme.onSurfaceVariant,
@@ -1692,6 +1843,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           child: const Icon(Icons.mic, color: Colors.white),
                         ),
                       ),
+                  ],
+                ),
                   ],
                 ),
               ),

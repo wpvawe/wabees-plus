@@ -341,6 +341,7 @@ class WhatsappRepository {
     required String userId,
     required String to,
     required String message,
+    String? contextMessageId,
   }) async {
     // Smart config: owner first, fallback to agent's own
     final config = await _resolveConfig(userId);
@@ -353,6 +354,7 @@ class WhatsappRepository {
       accessToken: config.accessToken,
       to: to,
       message: message,
+      contextMessageId: contextMessageId,
     );
 
     // Bug 6 fix: invalidate config cache on token expiry so next call fetches fresh token
@@ -395,6 +397,8 @@ class WhatsappRepository {
     String? mediaId,
     String? caption,
     bool isVoice = false, // true for voice notes
+    String? filename,
+    String? contextMessageId,
   }) async {
     final config = await _resolveConfig(userId);
     if (!config.hasCredentials) {
@@ -410,6 +414,8 @@ class WhatsappRepository {
       mediaId: mediaId,
       caption: caption,
       isVoice: isVoice,
+      filename: filename,
+      contextMessageId: contextMessageId,
     );
 
     // Bug 6 fix: invalidate config cache on token expiry
@@ -430,6 +436,42 @@ class WhatsappRepository {
         msg.contains('unauthorized') ||
         msg.contains('invalid or expired') ||
         msg.contains('access token');
+  }
+
+  // ============ SEND TYPING INDICATOR ============
+  Future<WhatsappApiResponse> sendTypingIndicator({
+    required String userId,
+    required String messageId,
+  }) async {
+    final config = await _resolveConfig(userId);
+    if (!config.hasCredentials) {
+      return WhatsappApiResponse.error('WhatsApp not connected');
+    }
+    return _api.sendTypingIndicator(
+      phoneNumberId: config.phoneNumberId,
+      accessToken: config.accessToken,
+      messageId: messageId,
+    );
+  }
+
+  // ============ SEND REACTION ============
+  Future<WhatsappApiResponse> sendReaction({
+    required String userId,
+    required String to,
+    required String messageId,
+    required String emoji, // empty string removes reaction
+  }) async {
+    final config = await _resolveConfig(userId);
+    if (!config.hasCredentials) {
+      return WhatsappApiResponse.error('WhatsApp not connected');
+    }
+    return _api.sendReactionMessage(
+      phoneNumberId: config.phoneNumberId,
+      accessToken: config.accessToken,
+      to: to,
+      messageId: messageId,
+      emoji: emoji,
+    );
   }
 
   // ============ DELETE (UNSEND) MESSAGE ============

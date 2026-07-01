@@ -150,6 +150,10 @@ class MessageRepository {
     required String contactPhone,
     required String contactName,
     required String text,
+    String? replyToId,
+    String? replyToBody,
+    String? replyToWamid,
+    String? replyToType,
   }) async {
     // Normalize phone to prevent duplicate conversations
     final normalizedPhone = PhoneUtils.normalize(contactPhone);
@@ -239,6 +243,10 @@ class MessageRepository {
         direction: MessageDirection.outgoing,
         status: MessageStatus.pending,
         body: text,
+        replyToId: replyToId,
+        replyToBody: replyToBody,
+        replyToWamid: replyToWamid,
+        replyToType: replyToType,
         createdAt: DateTime.now(),
       );
 
@@ -263,6 +271,7 @@ class MessageRepository {
         userId: userId,
         to: contactPhone,
         message: text,
+        contextMessageId: replyToWamid,
       );
 
       // 3. Update status
@@ -409,6 +418,10 @@ class MessageRepository {
     String? fileName,
     int? fileSize,
     bool isVoice = false, // true = real WhatsApp voice note
+    String? replyToId,
+    String? replyToBody,
+    String? replyToWamid,
+    String? replyToType,
   }) async {
     contactPhone = PhoneUtils.normalize(contactPhone);
     final msgRef = _firestore.user(userId).collection('messages').doc();
@@ -432,6 +445,10 @@ class MessageRepository {
       caption: caption,
       fileName: fileName,
       fileSize: fileSize,
+      replyToId: replyToId,
+      replyToBody: replyToBody,
+      replyToWamid: replyToWamid,
+      replyToType: replyToType,
       createdAt: DateTime.now(),
     );
 
@@ -457,6 +474,8 @@ class MessageRepository {
       mediaId: mediaId,
       caption: caption,
       isVoice: isVoice,
+      filename: mediaType == 'document' ? fileName : null,
+      contextMessageId: replyToWamid,
     );
 
     if (result.success) {

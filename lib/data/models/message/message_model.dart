@@ -28,6 +28,12 @@ class MessageModel {
   final String? errorReason;   // Why message failed
   final String? reactionEmoji; // Reaction emoji
   final String? reactionMsgId; // ID of msg being reacted to
+  final DateTime? reactionAt;  // When reaction was set (newer-wins merge)
+  // Reply context (Meta context.message_id echoed back on webhooks)
+  final String? replyToId;     // Local Firestore doc id being replied to
+  final String? replyToBody;   // Snapshot of quoted text/preview
+  final String? replyToWamid;  // WhatsApp message id of quoted message
+  final String? replyToType;   // Type of quoted message
   final String? botName;       // Bot that sent this message
   final DateTime createdAt;
   final DateTime? deliveredAt;
@@ -56,6 +62,11 @@ class MessageModel {
     this.errorReason,
     this.reactionEmoji,
     this.reactionMsgId,
+    this.reactionAt,
+    this.replyToId,
+    this.replyToBody,
+    this.replyToWamid,
+    this.replyToType,
     this.botName,
     required this.createdAt,
     this.deliveredAt,
@@ -105,6 +116,11 @@ class MessageModel {
       errorReason: json['errorReason'],
       reactionEmoji: json['reactionEmoji'],
       reactionMsgId: json['reactionMsgId'],
+      reactionAt: _parseDateNullable(json['reactionAt']),
+      replyToId: json['replyToId'],
+      replyToBody: json['replyToBody'],
+      replyToWamid: json['replyToWamid'],
+      replyToType: json['replyToType'],
       botName: json['botName'],
       createdAt: _parseDate(json['createdAt']),
       deliveredAt: _parseDateNullable(json['deliveredAt']),
@@ -133,6 +149,13 @@ class MessageModel {
       'ctaButton': ctaButton,
       'whatsappMessageId': whatsappMessageId,
       'errorReason': errorReason,
+      'reactionEmoji': reactionEmoji,
+      'reactionMsgId': reactionMsgId,
+      'reactionAt': reactionAt != null ? Timestamp.fromDate(reactionAt!) : null,
+      'replyToId': replyToId,
+      'replyToBody': replyToBody,
+      'replyToWamid': replyToWamid,
+      'replyToType': replyToType,
       'createdAt': Timestamp.fromDate(createdAt),
       'deliveredAt': deliveredAt != null ? Timestamp.fromDate(deliveredAt!) : null,
       'readAt': readAt != null ? Timestamp.fromDate(readAt!) : null,
@@ -160,6 +183,13 @@ class MessageModel {
     Map<String, dynamic>? ctaButton,
     String? whatsappMessageId,
     String? errorReason,
+    String? reactionEmoji,
+    String? reactionMsgId,
+    DateTime? reactionAt,
+    String? replyToId,
+    String? replyToBody,
+    String? replyToWamid,
+    String? replyToType,
     DateTime? createdAt,
     DateTime? deliveredAt,
     DateTime? readAt,
@@ -185,6 +215,13 @@ class MessageModel {
       ctaButton: ctaButton ?? this.ctaButton,
       whatsappMessageId: whatsappMessageId ?? this.whatsappMessageId,
       errorReason: errorReason ?? this.errorReason,
+      reactionEmoji: reactionEmoji ?? this.reactionEmoji,
+      reactionMsgId: reactionMsgId ?? this.reactionMsgId,
+      reactionAt: reactionAt ?? this.reactionAt,
+      replyToId: replyToId ?? this.replyToId,
+      replyToBody: replyToBody ?? this.replyToBody,
+      replyToWamid: replyToWamid ?? this.replyToWamid,
+      replyToType: replyToType ?? this.replyToType,
       createdAt: createdAt ?? this.createdAt,
       deliveredAt: deliveredAt ?? this.deliveredAt,
       readAt: readAt ?? this.readAt,
