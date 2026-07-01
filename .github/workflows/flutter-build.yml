@@ -16,6 +16,11 @@ jobs:
     name: Analyze & Build APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+      RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+      RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+      RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -41,11 +46,6 @@ jobs:
 
       - name: Decode release keystore
         if: env.RELEASE_KEYSTORE_BASE64 != ''
-        env:
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > android/app/release.jks
           cat > android/key.properties <<KP
