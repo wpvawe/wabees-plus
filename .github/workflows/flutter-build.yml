@@ -56,18 +56,20 @@ jobs:
           KP
           echo "✅ Release keystore configured"
 
-      - name: Print signing SHA fingerprints (register these in Firebase Console)
-        working-directory: android
-        run: |
-          echo "===================== SIGNING REPORT ====================="
-          ./gradlew :app:signingReport --console=plain 2>&1 | tee /tmp/sr.txt | grep -iE "variant|config|sha1|sha-256|sha256|store|alias|valid" || tail -200 /tmp/sr.txt
-          echo "=========================================================="
-
       - name: Analyze (non-blocking)
         run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
 
       - name: Build APK (release, split-per-abi, compressed)
         run: flutter build apk --release --split-per-abi --shrink --obfuscate --split-debug-info=build/symbols
+
+      - name: Print signing SHA fingerprints (register these in Firebase Console)
+        working-directory: android
+        run: |
+          echo "===================== SIGNING REPORT ====================="
+          ./gradlew :app:signingReport --console=plain 2>&1 | tee /tmp/sr.txt | grep -iE "variant:|config:|sha1|sha-256|sha256|store|alias|valid" || tail -300 /tmp/sr.txt
+          echo "=========================================================="
+          echo "---- FULL RELEASE BLOCK ----"
+          awk '/Variant: release/,/^$/' /tmp/sr.txt || true
 
       - name: List built APKs with sizes
         run: |
