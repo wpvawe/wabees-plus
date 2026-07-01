@@ -113,7 +113,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: SelectableText(
-                  'POST https://api.wabees.live/api/send.php\n\nHeaders:\n  X-Api-Key: $_apiKey\n\nBody:\n{\n  "phone": "923001234567",\n  "message": "Hello!"\n}',
+                  'POST https://api.wabees.live/send.php\n\nHeaders:\n  X-Api-Key: $_apiKey\n\nBody:\n{\n  "phone": "923001234567",\n  "message": "Hello!"\n}',
                   style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Color(0xFFA6E3A1)),
                 ),
               ),
