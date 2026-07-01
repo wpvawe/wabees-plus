@@ -1137,7 +1137,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final userId = ref.watch(currentUserProvider)?.id ?? '';
 
     // FIX: Check for lastIncomingMessageAt consistency and repair if needed
-    ref.listen(chatMessagesProvider(widget.contactPhone), (prev, next) {
+    ref.listen(chatMessagesProvider(normalizedPhoneForProviders), (prev, next) {
       // Play notification beep ONLY for genuinely new real-time messages
       // _ringReady is false for 2s after chat opens to prevent ring on initial load
       if (_ringReady && prev?.hasValue == true && next.hasValue) {
@@ -1165,37 +1165,48 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (next.hasValue && next.value!.isNotEmpty) {
         final messages = next.value!;
         DateTime? lastIncoming;
-        
-        // Find the latest incoming message
+
+        // Find the latest incoming message that actually opens Meta's 24h window.
+        // Reactions, system events, templates, unsupported and stickers do NOT
+        // open a customer service window — using them would show a "window open"
+        // banner while Meta still rejects free-form sends with error 131047.
+        const windowOpeningTypes = <MessageType>{
+          MessageType.text,
+          MessageType.image,
+          MessageType.video,
+          MessageType.audio,
+          MessageType.document,
+          MessageType.location,
+          MessageType.contact,
+          MessageType.interactive,
+          MessageType.button,
+          MessageType.order,
+        };
         for (final m in messages.reversed) {
-          if (m.direction.isIncoming) {
+          if (m.direction.isIncoming && windowOpeningTypes.contains(m.type)) {
             lastIncoming = m.createdAt;
             break;
           }
         }
 
         if (lastIncoming != null) {
-          final conv = ref.read(conversationDetailProvider(widget.contactPhone)).valueOrNull;
-          // If conversation doc doesn't have it, or has an older one, update it!
-          // FORCE update if it's within 24h to ensure banner shows up even if slightly off
-          // Also, if the conv object is missing lastIncomingMessageAt, definitely update.
+          final conv = ref.read(conversationDetailProvider(normalizedPhoneForProviders)).valueOrNull;
           final now = DateTime.now();
           final isRecent = now.difference(lastIncoming).inHours < 24;
 
-          if (conv == null || 
-              conv.lastIncomingMessageAt == null || 
+          if (conv == null ||
+              conv.lastIncomingMessageAt == null ||
               (isRecent && conv.lastIncomingMessageAt!.isBefore(lastIncoming.subtract(const Duration(seconds: 1))))) {
-            
             final user = ref.read(currentUserProvider);
             if (user != null) {
-              // Fire-and-forget update to ensure consistency across app
+              // Always write on the OWNER's conversation doc so agents & owner stay in sync.
+              final ownerId = user.dataOwner ?? user.id;
               ref.read(messageRepositoryProvider).updateLastIncomingMessageTime(
-                user.id,
-                widget.contactPhone,
+                ownerId,
+                normalizedPhoneForProviders,
                 lastIncoming,
               );
-              // Force refresh conversation provider to update UI immediately
-              ref.invalidate(conversationDetailProvider(widget.contactPhone));
+              ref.invalidate(conversationDetailProvider(normalizedPhoneForProviders));
             }
           }
         }
