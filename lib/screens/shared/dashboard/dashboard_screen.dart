@@ -100,6 +100,18 @@ class _UserDashboard extends ConsumerWidget {
       });
     });
 
+    // Repair totalMessages drift once per dashboard mount (cheap aggregate .count()).
+    // Fixes historical inconsistencies where template sends or media failures
+    // skipped the counter — dashboard now shows the authoritative count.
+    ref.listen(conversationsProvider, (prev, next) {
+      if (prev?.hasValue == true || !next.hasValue) return;
+      final u = ref.read(currentUserProvider);
+      if (u == null) return;
+      final ownerId = u.dataOwner ?? u.id;
+      final current = ref.read(dataOwnerUserProvider).valueOrNull?.totalMessages ?? 0;
+      ref.read(messageRepositoryProvider).repairTotalMessages(ownerId, current);
+    });
+
     // Activate notification listener for incoming messages
     ref.watch(notificationListenerProvider);
 
